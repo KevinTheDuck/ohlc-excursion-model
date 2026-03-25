@@ -22,4 +22,9 @@ def session_tagging(
     dt_col: str = config.schema.datetime,
     eod: int = config.timezone.eod_close_hour,
 ):
-    pass
+    return df.with_columns(
+        pl.when(pl.col(dt_col).dt.hour() >= eod)
+        .then((pl.col(dt_col) + pl.duration(days=1)).dt.date())
+        .otherwise(pl.col(dt_col).dt.date())
+        .alias("Session")
+    )
