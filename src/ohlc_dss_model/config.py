@@ -1,5 +1,13 @@
 from dataclasses import dataclass
+from pathlib import Path
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+@dataclass(frozen=True)
+class Data_cfg:
+    # if you use local dataset such as csv or parquet
+    file_path = _PROJECT_ROOT / "data" / "raw" / "NAS100_30m.parquet"
+    csv_separator: str = "\t"
 
 # Expected column names from broker
 @dataclass(frozen=True)
@@ -28,6 +36,7 @@ class Timezone_cfg:
 # Aliases
 @dataclass(frozen=True)
 class Project:
+    data: Data_cfg = Data_cfg()
     schema: Schema_cfg = Schema_cfg()
     timezone: Timezone_cfg = Timezone_cfg()
     session: Session_cfg = Session_cfg()
