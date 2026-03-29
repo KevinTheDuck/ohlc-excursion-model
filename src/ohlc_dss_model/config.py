@@ -6,7 +6,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 @dataclass(frozen=True)
 class Data_cfg:
     # if you use local dataset such as csv or parquet
-    file_path = _PROJECT_ROOT / "data" / "raw" / "NAS100_30m.parquet"
+    raw_folder_path = _PROJECT_ROOT / "data" / "raw"
+    file_path = raw_folder_path / "nq_30m.parquet"
     csv_separator: str = "\t"
 
 # Expected column names from broker
@@ -28,7 +29,7 @@ class Session_cfg:
 @dataclass(frozen=True)
 class Timezone_cfg:
     eod_close_hour: int = 17
-    broker: str = "EET"
+    broker: str = "UTC"
     # desired data timezone, recommended to leave this be
     target: str = "America/New_York"
 
