@@ -19,4 +19,3 @@ def remove_incomplete_days(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     return df.join(valid_days, on="Session", how="inner")
-
