@@ -38,6 +38,14 @@ class Volatility_cfg:
     # Rolling window for estimators
     n: int = 20
 
+@dataclass(frozen=True)
+class ExcursionBands_cfg:
+    # Rolling window for z_sigma calculation
+    n: int = 20
+    
+    tau_0: float = 0.4
+    tau_min: float = 0.26
+    tau_max: float = 1.75
 
 # Aliases
 @dataclass(frozen=True)
@@ -47,6 +55,6 @@ class Project:
     timezone: Timezone_cfg = Timezone_cfg()
     session: Session_cfg = Session_cfg()
     volatility: Volatility_cfg = Volatility_cfg()
-
+    excursion_bands: ExcursionBands_cfg = ExcursionBands_cfg()
 
 config = Project()
