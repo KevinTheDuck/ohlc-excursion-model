@@ -40,7 +40,7 @@ class Volatility_cfg:
 
 @dataclass(frozen=True)
 class ExcursionBands_cfg:
-    # Rolling window for z_sigma calculation
+    # Rolling window for excursion bands
     n: int = 20
     
     tau_0: float = 0.4
