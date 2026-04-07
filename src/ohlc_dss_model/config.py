@@ -47,6 +47,9 @@ class ExcursionBands_cfg:
     tau_min: float = 0.26
     tau_max: float = 1.75
 
+    # Scaling factor for bands width
+    k: float = 0.07
+
 # Aliases
 @dataclass(frozen=True)
 class Project:

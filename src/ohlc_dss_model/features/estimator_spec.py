@@ -10,7 +10,7 @@ class Spec:
     label: str
 
 
-HISTORICAL_SPEC = Spec(
+FULL_DAY_SPEC = Spec(
     open="O_Asia",
     high_cols=["H_Asia", "H_London", "H_New York"],
     low_cols=["L_Asia", "L_London", "L_New York"],
@@ -19,7 +19,7 @@ HISTORICAL_SPEC = Spec(
     label="Sigma_Historical",
 )
 
-TODAY_SPEC = Spec(
+PRE_NY_SPEC = Spec(
     open="O_Asia",
     high_cols=["H_Asia", "H_London"],
     low_cols=["L_Asia", "L_London"],

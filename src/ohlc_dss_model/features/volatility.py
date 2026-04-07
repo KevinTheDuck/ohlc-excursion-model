@@ -22,7 +22,7 @@ def _rogers_satchell(spec: Spec):
     rs = (h / c).log() * (h / o).log() + (l / c).log() * (l / o).log()
     return rs.alias("_rs")
 
-def _yang_zhang_core(df: pl.DataFrame, n: int, label: str) -> pl.DataFrame:
+def _yang_zhang_rolling(df: pl.DataFrame, n: int, label: str) -> pl.DataFrame:
     k = 0.34 / (1.34 + (n + 1) / (n - 1))
 
     yz = (
@@ -33,17 +33,26 @@ def _yang_zhang_core(df: pl.DataFrame, n: int, label: str) -> pl.DataFrame:
 
     return df.with_columns(yz.sqrt().alias(label))
 
-def yang_zhang(
-    df: pl.DataFrame,
-    spec: Spec,
-    n: int = Volatility_cfg.n,
-) -> pl.DataFrame:
+def _yang_zhang_today(df: pl.DataFrame, label: str) -> pl.DataFrame:
+    # No k here since its purely for today so no n needed
+    yz = (
+        pl.col("_log_overnight")**2
+        + pl.col("_log_oc")**2
+        + pl.col("_rs")
+    )
+
+    return df.with_columns(yz.sqrt().alias(label))
+
+def yang_zhang(df: pl.DataFrame, spec: Spec, mode: str, n: int = Volatility_cfg.n):
 
     log_overnight, log_oc = _log_returns(spec)
     rs = _rogers_satchell(spec)
 
     df = df.with_columns([log_overnight, log_oc, rs])
 
-    df = _yang_zhang_core(df, n=n, label=spec.label)
+    if mode == "historical":
+        df = _yang_zhang_rolling(df, n=n, label=spec.label)
+    else:
+        df = _yang_zhang_today(df, label=spec.label)
 
     return df.drop(["_log_overnight", "_log_oc", "_rs"])
