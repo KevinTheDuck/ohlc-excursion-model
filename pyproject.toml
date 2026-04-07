@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ohlc_dss_model"
 version = "0.1.0"
-description = "OHLC Volatility Model"
+description = "OHLC Excursion Model"
 
 [tool.setuptools.packages.find]
 where = ["src"]

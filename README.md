@@ -1,4 +1,4 @@
-# ohlc-volatility-model
+# ohlc-excursion-model
 
 ## 1. Install Nix
 

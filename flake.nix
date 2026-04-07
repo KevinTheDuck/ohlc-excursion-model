@@ -1,6 +1,5 @@
-
 {
-  description = "OHLC Volatility Model";
+  description = "OHLC Excursion Model";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
@@ -23,7 +22,8 @@
           seaborn
           scipy
           jupyterlab
-          ipykernel
+          ipykernel 
+          mplfinance
         ]);
       in
       {
@@ -43,8 +43,10 @@
 
             source .venv/bin/activate
 
-            pip install polars pyarrow duckdb databento mplfinance exchange-calendars --quiet
+            pip install polars pyarrow duckdb exchange-calendars databento --quiet
             pip install -e . --quiet
+
+            python -m ipykernel install --user --name ohlc-excursion-model --display-name "ohlc-excursion-model"
 
             echo "Python ${pkgs.python311.version} ready"
           '';
