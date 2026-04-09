@@ -9,6 +9,9 @@ class Data_cfg:
     raw_folder_path = _PROJECT_ROOT / "data" / "raw"
     file_path = raw_folder_path / "nq_30m.parquet"
     csv_separator: str = "\t"
+    
+    plot_fig_size: tuple = (12, 8)
+    pivot_marker_offset: float = 0.5
 
 # Expected column names from broker
 @dataclass(frozen=True)
@@ -48,7 +51,7 @@ class ExcursionBands_cfg:
     tau_max: float = 1.75
 
     # Scaling factor for bands width
-    k: float = 0.07
+    k: float = 0.09
 
 # Aliases
 @dataclass(frozen=True)
