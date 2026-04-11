@@ -18,7 +18,6 @@ class Data_cfg:
 class Schema_cfg:
     datetime: str = "DateTime"
 
-
 # Intraday Session Settings
 @dataclass(frozen=True)
 class Session_cfg:

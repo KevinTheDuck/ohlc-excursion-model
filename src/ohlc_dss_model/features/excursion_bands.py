@@ -29,7 +29,6 @@ def _get_day_boundaries(df: pl.DataFrame) -> pl.DataFrame:
         pl.max_horizontal(pl.col("H_Asia"), pl.col("H_London"), pl.col("H_New York")).alias("H_Day")
     ])
 
-
 def _calculate_epsilon(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns([
         (

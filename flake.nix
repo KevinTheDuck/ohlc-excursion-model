@@ -43,7 +43,7 @@
 
             source .venv/bin/activate
 
-            pip install polars pyarrow duckdb exchange-calendars databento --quiet
+            pip install polars pyarrow duckdb exchange-calendars databento pytest --quiet
             pip install -e . --quiet
 
             python -m ipykernel install --user --name ohlc-excursion-model --display-name "ohlc-excursion-model"
