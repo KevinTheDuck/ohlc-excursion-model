@@ -52,6 +52,10 @@ class ExcursionBands_cfg:
     # Scaling factor for bands width
     k: float = 0.09
 
+@dataclass(frozen=True)
+class Transformer_cfg:
+    max_pivot: int = 27
+
 # Aliases
 @dataclass(frozen=True)
 class Project:
@@ -61,5 +65,6 @@ class Project:
     session: Session_cfg = Session_cfg()
     volatility: Volatility_cfg = Volatility_cfg()
     excursion_bands: ExcursionBands_cfg = ExcursionBands_cfg()
+    transformer: Transformer_cfg = Transformer_cfg()
 
 config = Project()
