@@ -1,16 +1,8 @@
 import polars as pl
 
-def _calculate_tau_k(df: pl.DataFrame) -> pl.DataFrame:
-    return df.with_columns([
-        pl.int_range(0, pl.len()).over("Session").alias("_i_k"),
-        pl.len().over("Session").alias("_n_k")
-    ]).with_columns([
-        (pl.col("_i_k") / (pl.col("_n_k") - 1)).alias("tau_k")
-    ])
-
 def _join_aggregated_data(pivots: pl.DataFrame, aggregated_data: pl.DataFrame) -> pl.DataFrame:
     shifted_aggregated_data = aggregated_data.with_columns([
-        pl.col("Sigma_Historical").shift(1).over("Session").alias("Sigma_Historical")
+        pl.col("Sigma_Historical").shift(1).alias("Sigma_Historical")
     ])
     return pivots.join(shifted_aggregated_data, on="Session", how="left")
 
@@ -19,13 +11,64 @@ def _calculate_Pi_k(pivots: pl.DataFrame) -> pl.DataFrame:
         ((pl.col("P_k") - pl.col("O_Ref")) / pl.col("Sigma_Historical")).alias("Pi_k")
     ])
 
+def _calculate_sigma_price(pivots: pl.DataFrame) -> pl.DataFrame:
+    return pivots.with_columns([
+        (pl.col("Sigma_Historical") * pl.col("O_Ref")).alias("Sigma_Price")
+    ])
+
 def _calculate_bands_delta(pivots: pl.DataFrame) -> pl.DataFrame:
     return pivots.with_columns([
-        ((pl.col("P_k") - pl.col("Band_FE_Pos_Center")) / (pl.col("Sigma_Historical") * pl.col("O_Ref"))).alias("Delta_FE_Pos"),
-        ((pl.col("P_k") - pl.col("Band_AE_Pos_Center")) / (pl.col("Sigma_Historical") * pl.col("O_Ref"))).alias("Delta_AE_Pos"),
-        ((pl.col("Band_FE_Neg_Center") - pl.col("P_k")) / (pl.col("Sigma_Historical") * pl.col("O_Ref"))).alias("Delta_FE_Neg"),
-        ((pl.col("Band_AE_Neg_Center") - pl.col("P_k")) / (pl.col("Sigma_Historical") * pl.col("O_Ref"))).alias("Delta_AE_Neg")
+        ((pl.col("P_k") - pl.col("Band_FE_Pos_Center")) / pl.col("Sigma_Price")).alias("Delta_FE_Pos"),
+        ((pl.col("P_k") - pl.col("Band_AE_Pos_Center")) / pl.col("Sigma_Price")).alias("Delta_AE_Pos"),
+        ((pl.col("P_k") - pl.col("Band_FE_Neg_Center")) / pl.col("Sigma_Price")).alias("Delta_FE_Neg"),
+        ((pl.col("P_k") - pl.col("Band_AE_Neg_Center")) / pl.col("Sigma_Price")).alias("Delta_AE_Neg"),
     ])
+
+def _calculate_band_states(pivots: pl.DataFrame) -> pl.DataFrame:
+    return pivots.with_columns([
+        ((pl.col("P_k") >= pl.col("Band_AE_Neg_Lower")) & (pl.col("P_k") <= pl.col("Band_AE_Neg_Upper"))).cast(pl.Int8).alias("State_AE_Neg"),
+        ((pl.col("P_k") >= pl.col("Band_AE_Pos_Lower")) & (pl.col("P_k") <= pl.col("Band_AE_Pos_Upper"))).cast(pl.Int8).alias("State_AE_Pos"),
+        ((pl.col("P_k") >= pl.col("Band_FE_Neg_Lower")) & (pl.col("P_k") <= pl.col("Band_FE_Neg_Upper"))).cast(pl.Int8).alias("State_FE_Neg"),
+        ((pl.col("P_k") >= pl.col("Band_FE_Pos_Lower")) & (pl.col("P_k") <= pl.col("Band_FE_Pos_Upper"))).cast(pl.Int8).alias("State_FE_Pos"),
+    ])
+
+def _calculate_temporal_dynamics(pivots: pl.DataFrame) -> pl.DataFrame:
+    pivots = pivots.with_columns([
+        pl.col("Pi_k").shift(1).over("Session").alias("_Pi_k_prev"),
+        pl.col("DateTime").shift(1).over("Session").alias("_DateTime_prev"),
+    ])
+
+    pivots = pivots.with_columns([
+        (pl.col("Pi_k") - pl.col("_Pi_k_prev")).fill_null(0.0).alias("delta_Pi_k"),
+        (pl.col("Pi_k") - pl.col("_Pi_k_prev")).abs().fill_null(0.0).alias("abs_delta_Pi_k"),
+        (
+            ((pl.col("DateTime") - pl.col("_DateTime_prev")).dt.total_minutes() / 30)
+            .fill_null(0)
+            .cast(pl.Int16)
+        ).alias("delta_b_k"),
+    ])
+
+    pivots = pivots.with_columns([
+        pl.when(pl.col("delta_b_k") > 0)
+        .then(pl.col("delta_Pi_k") / pl.col("delta_b_k"))
+        .otherwise(0.0)
+        .alias("Speed_k"),
+
+        pl.when(pl.col("delta_Pi_k") > 0).then(pl.lit(1))
+        .when(pl.col("delta_Pi_k") < 0).then(pl.lit(-1))
+        .otherwise(pl.lit(0))
+        .alias("Dir_k"),
+    ])
+
+    pivots = pivots.with_columns([
+        pl.col("Dir_k").shift(1).over("Session").fill_null(0).alias("_Dir_prev"),
+    ]).with_columns([
+        ((pl.col("Dir_k") != pl.col("_Dir_prev")) & (pl.col("Dir_k") != 0) & (pl.col("_Dir_prev") != 0))
+        .cast(pl.Int8)
+        .alias("Turn_k")
+    ]).drop(["_Pi_k_prev", "_DateTime_prev", "_Dir_prev"])
+
+    return pivots
 
 def detect_pivots(
     df_bars: pl.DataFrame,
@@ -106,4 +149,4 @@ def pivot_extraction(df: pl.DataFrame) -> pl.DataFrame:
     ])
 
     pivots = pivots.sort(["Session", "DateTime", "intra_order"])
-    return pivots.select(["DateTime", "Session", "P_k", "s_k"])
+    return pivots.select(["DateTime", "Intraday_Session", "Session", "P_k", "s_k"])
