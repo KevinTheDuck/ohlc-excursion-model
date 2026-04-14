@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -7,7 +7,9 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 class Data_cfg:
     # if you use local dataset such as csv or parquet
     raw_folder_path = _PROJECT_ROOT / "data" / "raw"
+    processed_folder_path = _PROJECT_ROOT / "data" / "processed"
     file_path = raw_folder_path / "nq_30m.parquet"
+    event_path = processed_folder_path / "event_table.parquet"
     csv_separator: str = "\t"
     
     plot_fig_size: tuple = (12, 8)
