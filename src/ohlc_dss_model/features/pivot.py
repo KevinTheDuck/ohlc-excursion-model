@@ -145,7 +145,7 @@ def pivot_extraction(df: pl.DataFrame) -> pl.DataFrame:
         "Intraday_Session",
         "P_k",
         "s_k",
-        "intra_order"
+        "intra_order",
     ])
 
     pivots = pivots.sort(["Session", "DateTime", "intra_order"])
@@ -158,4 +158,4 @@ def build_pivot_features(pivots: pl.DataFrame, aggregated_data: pl.DataFrame) ->
     pivots = _calculate_bands_delta(pivots)
     pivots = _calculate_band_states(pivots)
     pivots = _calculate_temporal_dynamics(pivots)
-    return pivots
+    return pivots.drop_nulls()

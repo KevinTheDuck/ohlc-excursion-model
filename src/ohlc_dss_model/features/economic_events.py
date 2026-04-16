@@ -2,6 +2,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 from datetime import date, timedelta
+from typing import Any
 from fredapi import Fred
 import polars as pl
 import holidays
@@ -20,6 +21,76 @@ FRED_SERIES = {
     "JTSJOL":        ("US JOLTS Job Openings",               1),
     "RSXFS":         ("US Core Retail Sales m/m",            1),
 }
+
+
+def _as_date(value: Any) -> date:
+    return value.date() if hasattr(value, "date") else date.fromisoformat(str(value)[:10])
+
+
+def _collect_fred_records(
+    fred: Fred,
+    start: date,
+    end: date,
+    include_metadata: bool,
+    print_counts: bool,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+
+    for series_id, (name, weight) in FRED_SERIES.items():
+        try:
+            vintage_dates = fred.get_series_vintage_dates(series_id)
+            count = 0
+            for d in vintage_dates:
+                release_date = _as_date(d)
+                if not (start <= release_date <= end):
+                    continue
+
+                row = {"Session": release_date, "e_weight": weight}
+                if include_metadata:
+                    row.update({"series_id": series_id, "name": name})
+                records.append(row)
+                count += 1
+
+            if print_counts:
+                print(f"  [ok] {series_id:20} ({name}): {count} releases")
+        except Exception as e:
+            print(f"  [warn] {series_id:20}: {e}")
+
+    return records
+
+
+def _append_generated_events(
+    records: list[dict[str, Any]],
+    start: date,
+    end: date,
+    include_metadata: bool,
+    print_ism_count: bool,
+) -> None:
+    for d in fetch_fomc_dates(start, end):
+        if include_metadata:
+            records.append({
+                "Session": d,
+                "series_id": "FOMC",
+                "name": "US Federal Funds Rate",
+                "e_weight": 3,
+            })
+        else:
+            records.append({"Session": d, "e_weight": 3})
+
+    ism_dates = _generate_ism_services_dates(start, end)
+    for d in ism_dates:
+        if include_metadata:
+            records.append({
+                "Session": d,
+                "series_id": "ISM_SVC",
+                "name": "US ISM Services PMI",
+                "e_weight": 1,
+            })
+        else:
+            records.append({"Session": d, "e_weight": 1})
+
+    if print_ism_count:
+        print(f"  [ok] {'ISM_SERVICES_GEN':20} (US ISM Services PMI): {len(ism_dates)} releases")
 
 
 
@@ -112,31 +183,23 @@ def build_event_table(
     api_key: str,
 ) -> pl.DataFrame:
     fred = Fred(api_key=api_key)
-    records = []
-
-    for series_id, (name, weight) in FRED_SERIES.items():
-        try:
-            vintage_dates = fred.get_series_vintage_dates(series_id)
-            count = 0
-            for d in vintage_dates:
-                rd = d.date() if hasattr(d, "date") else date.fromisoformat(str(d)[:10])
-                if start <= rd <= end:
-                    records.append({"Session": rd, "e_weight": weight})
-                    count += 1
-            print(f"  [ok] {series_id:20} ({name}): {count} releases")
-        except Exception as e:
-            print(f"  [warn] {series_id:20}: {e}")
-
-    for d in fetch_fomc_dates(start, end):
-        records.append({"Session": d, "e_weight": 3})
-
-    ism_dates = _generate_ism_services_dates(start, end)
-    for d in ism_dates:
-        records.append({"Session": d, "e_weight": 1})
-    print(f"  [ok] {'ISM_SERVICES_GEN':20} (US ISM Services PMI): {len(ism_dates)} releases")
+    records = _collect_fred_records(
+        fred=fred,
+        start=start,
+        end=end,
+        include_metadata=False,
+        print_counts=True,
+    )
+    _append_generated_events(
+        records=records,
+        start=start,
+        end=end,
+        include_metadata=False,
+        print_ism_count=True,
+    )
 
     if not records:
-        raise ValueError("No data fetched — check api_key and network.")
+        raise ValueError("No data fetched, check api_key and network.")
 
     result = (
         pl.DataFrame(records)
@@ -150,9 +213,9 @@ def build_event_table(
     )
 
     assert result["Session"].n_unique() == result.height, \
-        "duplicate Sessions in event_table after group_by — investigate"
+        "duplicate Sessions in event_table after group_by, investigate"
     assert result["e_weight"].max() <= 3, \
-        "e_weight exceeded 3 — check weight definitions"
+        "e_weight exceeded 3, check weight definitions"
 
     print(f"\n[info] {result.height} event days between {start} and {end}")
     print(f"[info] w=3 ultra-high: {result.filter(pl.col('e_weight')==3).height} days")
@@ -168,26 +231,19 @@ def encode_news_context(
     event_table: pl.DataFrame,
 ) -> pl.DataFrame:
     assert event_table["Session"].n_unique() == event_table.height, \
-        "event_table has duplicate Sessions — run build_event_table first"
+        "event_table has duplicate Sessions, run build_event_table first"
 
-    ev = event_table
-
-    df = sessions.join(
-        ev.rename({"e_weight": "e_today"}),
-        on="Session", how="left",
-    )
-    df = df.join(
-        ev.with_columns(
-            (pl.col("Session") + pl.duration(days=1)).alias("Session")
-        ).rename({"e_weight": "e_yesterday"}),
-        on="Session", how="left",
-    )
-    df = df.join(
-        ev.with_columns(
-            (pl.col("Session") - pl.duration(days=1)).alias("Session")
-        ).rename({"e_weight": "e_tomorrow"}),
-        on="Session", how="left",
-    )
+    df = sessions
+    join_specs = [
+        (0, "e_today"),
+        (1, "e_yesterday"),
+        (-1, "e_tomorrow"),
+    ]
+    for shift_days, column_name in join_specs:
+        shifted = event_table.with_columns(
+            (pl.col("Session") + pl.duration(days=shift_days)).alias("Session")
+        ).rename({"e_weight": column_name})
+        df = df.join(shifted, on="Session", how="left")
 
     result = df.with_columns([
         pl.col("e_today").fill_null(0).cast(pl.Int8),
@@ -207,28 +263,20 @@ def inspect_event_table(
     end: date,
 ) -> pl.DataFrame:
     fred = Fred(api_key=api_key)
-    records = []
-
-    for series_id, (name, weight) in FRED_SERIES.items():
-        try:
-            vintage_dates = fred.get_series_vintage_dates(series_id)
-            for d in vintage_dates:
-                rd = d.date() if hasattr(d, "date") else date.fromisoformat(str(d)[:10])
-                if start <= rd <= end:
-                    records.append({
-                        "Session":   rd,
-                        "series_id": series_id,
-                        "name":      name,
-                        "e_weight":  weight,
-                    })
-        except Exception as e:
-            print(f"  [warn] {series_id}: {e}")
-
-    for d in fetch_fomc_dates(start, end):
-        records.append({"Session": d, "series_id": "FOMC", "name": "US Federal Funds Rate", "e_weight": 3})
-
-    for d in _generate_ism_services_dates(start, end):
-        records.append({"Session": d, "series_id": "ISM_SVC", "name": "US ISM Services PMI", "e_weight": 1})
+    records = _collect_fred_records(
+        fred=fred,
+        start=start,
+        end=end,
+        include_metadata=True,
+        print_counts=False,
+    )
+    _append_generated_events(
+        records=records,
+        start=start,
+        end=end,
+        include_metadata=True,
+        print_ism_count=False,
+    )
 
     return (
         pl.DataFrame(records)
