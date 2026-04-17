@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
+from datetime import date
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -55,8 +56,28 @@ class ExcursionBands_cfg:
     k: float = 0.09
 
 @dataclass(frozen=True)
-class Transformer_cfg:
-    max_pivot: int = 27
+class Pivot_transformer_cfg:
+    max_pivots: int = 27
+    burn_in_buffer = date(2016, 4, 5)
+
+    pivot_numerical_whitelist: list = field(default_factory=lambda: [
+        "Pi_k",
+        'Delta_FE_Pos', 'Delta_AE_Pos', 'Delta_FE_Neg', 'Delta_AE_Neg',
+        'State_AE_Neg', 'State_AE_Pos', 'State_FE_Neg', 'State_FE_Pos',
+        "delta_Pi_k", "delta_b_k", "Speed_k", "Dir_k", "Turn_k",
+    ])
+
+    pivot_categorical_whitelist: list = field(default_factory=lambda: [
+        "s_k", "Intraday_Session"
+    ])
+
+    context_whitelist: list = field(default_factory=lambda: [
+        "Sigma_Today", "Sigma_Historical_Shifted",
+        "e_yesterday", "e_today", "e_tomorrow",
+        "H_Asia_Normalized", "L_Asia_Normalized", "C_Asia_Normalized",
+        "O_London_Normalized", "H_London_Normalized",
+        "L_London_Normalized", "C_London_Normalized",
+    ])
 
 # Aliases
 @dataclass(frozen=True)
@@ -67,6 +88,7 @@ class Project:
     session: Session_cfg = Session_cfg()
     volatility: Volatility_cfg = Volatility_cfg()
     excursion_bands: ExcursionBands_cfg = ExcursionBands_cfg()
-    transformer: Transformer_cfg = Transformer_cfg()
+    
+    pivot_transformer: Pivot_transformer_cfg = Pivot_transformer_cfg()
 
 config = Project()
