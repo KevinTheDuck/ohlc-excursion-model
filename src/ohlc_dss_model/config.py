@@ -27,7 +27,7 @@ class Session_cfg:
     asian_session: tuple = ((18, 0), (3, 0))
     london_session: tuple = ((3, 0), (8, 30))
     # including am + pm sessions
-    new_york_session: tuple = ((8, 30), (17, 0))
+    new_york_session: tuple = ((8, 30), (17, 00))
 
 
 # Timezone properties to be used in time related operations
@@ -41,12 +41,12 @@ class Timezone_cfg:
 @dataclass(frozen=True)
 class Volatility_cfg:
     # Rolling window for estimators
-    n: int = 20
+    n: int = 7
 
 @dataclass(frozen=True)
 class ExcursionBands_cfg:
     # Rolling window for excursion bands
-    n: int = 20
+    n: int = 7
     
     tau_0: float = 0.4
     tau_min: float = 0.26
@@ -58,7 +58,7 @@ class ExcursionBands_cfg:
 @dataclass(frozen=True)
 class Pivot_transformer_cfg:
     max_pivots: int = 27
-    burn_in_buffer = date(2016, 4, 5)
+    burn_in_buffer = date(2011, 4, 5)
 
     pivot_numerical_whitelist: list = field(default_factory=lambda: [
         "Pi_k",

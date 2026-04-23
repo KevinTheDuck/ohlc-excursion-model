@@ -23,6 +23,7 @@
           scipy
           jupyterlab
           ipykernel 
+          scikit-learn
           mplfinance
         ]);
       in
@@ -43,7 +44,7 @@
 
             source .venv/bin/activate
 
-            pip install polars pyarrow duckdb exchange-calendars databento pytest beautifulsoup4 holidays --quiet
+            pip install polars pyarrow yfinance duckdb xgboost optuna exchange-calendars fredapi databento pytest beautifulsoup4 holidays --quiet
             pip install -e . --quiet
 
             python -m ipykernel install --user --name ohlc-excursion-model --display-name "ohlc-excursion-model"
