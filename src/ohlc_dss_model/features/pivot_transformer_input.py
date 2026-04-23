@@ -58,7 +58,7 @@ def build_transformer_input(pivots_data: pl.DataFrame, aggregated_data: pl.DataF
     valid_sessions = valid_sessions.filter(pl.col("Session") >= config.pivot_transformer.burn_in_buffer)["Session"].to_list()
 
     intraday_session_map = {"Asia": 1, "London": 2}
-    s_k_map = {-1: 1, 1: 2}
+    s_k_map = {-1: 0, 1: 1}
 
     Fc = len(config.pivot_transformer.context_whitelist)
     Fp = len(config.pivot_transformer.pivot_numerical_whitelist)
