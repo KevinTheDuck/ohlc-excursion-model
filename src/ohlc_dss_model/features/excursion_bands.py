@@ -5,7 +5,7 @@ from ohlc_dss_model.config import config
 # Private 
 def _calculate_z_body(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns(
-        ((pl.col("C_New York") / pl.col("O_Ref")).log().abs() / pl.col("Sigma_Historical")).alias("Z_Body")
+        ((pl.col("C_Target_2") / pl.col("O_Ref")).log().abs() / pl.col("Sigma_Historical")).alias("Z_Body")
     )
 
 def _calculate_z_sigma(df: pl.DataFrame, n: int = config.excursion_bands.n) -> pl.DataFrame:
@@ -25,8 +25,8 @@ def _calculate_threshold(
 
 def _get_day_boundaries(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns([
-        pl.min_horizontal(pl.col("L_Asia"), pl.col("L_London"), pl.col("L_New York")).alias("L_Day"),
-        pl.max_horizontal(pl.col("H_Asia"), pl.col("H_London"), pl.col("H_New York")).alias("H_Day")
+        pl.min_horizontal(pl.col("L_Pre_Target_1"), pl.col("L_Pre_Target_2"), pl.col("L_Target_1"), pl.col("L_Target_2")).alias("L_Day"),
+        pl.max_horizontal(pl.col("H_Pre_Target_1"), pl.col("H_Pre_Target_2"), pl.col("H_Target_1"), pl.col("H_Target_2")).alias("H_Day")
     ])
 
 def _calculate_epsilon(df: pl.DataFrame) -> pl.DataFrame:
@@ -77,9 +77,9 @@ def assign_direction(df: pl.DataFrame) -> pl.DataFrame:
     df = _calculate_threshold(df)
     
     return df.with_columns(
-        pl.when((pl.col("Z_Body") > pl.col("Tau")) & (pl.col("C_New York") > pl.col("O_Ref")))
+        pl.when((pl.col("Z_Body") > pl.col("Tau")) & (pl.col("C_Target_2") > pl.col("O_Ref")))
         .then(pl.lit("bullish"))
-        .when((pl.col("Z_Body") > pl.col("Tau")) & (pl.col("C_New York") < pl.col("O_Ref")))
+        .when((pl.col("Z_Body") > pl.col("Tau")) & (pl.col("C_Target_2") < pl.col("O_Ref")))
         .then(pl.lit("bearish"))
         .otherwise(pl.lit("neutral")).alias("Direction")
     )

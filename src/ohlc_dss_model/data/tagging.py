@@ -23,28 +23,34 @@ def session_tagging(
 def intraday_session_tagging(
     df: pl.DataFrame,
     dt_col: str = config.schema.datetime,
-    asian_interval: tuple = config.session.asian_session,
-    london_interval: tuple = config.session.london_session,
-    new_york_interval: tuple = config.session.new_york_session,
+    pt_1_interval: tuple = config.session.pre_target_split_1,
+    pt_2_interval: tuple = config.session.pre_target_split_2,
+    target_1_interval: tuple = config.session.target_split_1,
+    target_2_interval: tuple = config.session.target_split_2,
 ) -> pl.DataFrame:
     time_col = pl.col(dt_col).dt.time()
 
-    asian_start = time(*asian_interval[0])
-    asian_end = time(*asian_interval[1])
+    pre_target_1_start = time(*pt_1_interval[0])
+    pre_target_1_end = time(*pt_1_interval[1])
 
-    london_start = time(*london_interval[0])
-    london_end = time(*london_interval[1])
+    pre_target_2_start = time(*pt_2_interval[0])
+    pre_target_2_end = time(*pt_2_interval[1])
 
-    ny_start = time(*new_york_interval[0])
-    ny_end = time(*new_york_interval[1])
+    target_1_start = time(*target_1_interval[0])
+    target_1_end = time(*target_1_interval[1])
+
+    target_2_start = time(*target_2_interval[0])
+    target_2_end = time(*target_2_interval[1])
 
     df = df.with_columns(
-        pl.when(time_col.is_between(ny_start, ny_end, closed="left"))
-        .then(pl.lit("New York"))
-        .when(time_col.is_between(london_start, london_end, closed="left"))
-        .then(pl.lit("London"))
-        .when((time_col >= asian_start) | (time_col < asian_end))
-        .then(pl.lit("Asia"))
+        pl.when(time_col.is_between(target_1_start, target_1_end, closed="left"))
+        .then(pl.lit("Target_1"))
+        .when(time_col.is_between(target_2_start, target_2_end, closed="left"))
+        .then(pl.lit("Target_2"))
+        .when(time_col.is_between(pre_target_2_start, pre_target_2_end, closed="left"))
+        .then(pl.lit("Pre_Target_2"))
+        .when((time_col >= pre_target_1_start) | (time_col < pre_target_1_end))
+        .then(pl.lit("Pre_Target_1"))
         .otherwise(pl.lit("Closed"))
         .alias("Intraday_Session")
     )

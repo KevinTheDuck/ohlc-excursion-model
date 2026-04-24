@@ -24,10 +24,11 @@ class Schema_cfg:
 # Intraday Session Settings
 @dataclass(frozen=True)
 class Session_cfg:
-    asian_session: tuple = ((18, 0), (3, 0))
-    london_session: tuple = ((3, 0), (8, 30))
+    pre_target_split_1: tuple = ((18, 0), (3, 0))
+    pre_target_split_2: tuple = ((3, 0), (8, 30))
     # including am + pm sessions
-    new_york_session: tuple = ((8, 30), (17, 00))
+    target_split_1: tuple = ((8, 30), (12, 00))
+    target_split_2: tuple = ((13, 00), (17, 00))
 
 
 # Timezone properties to be used in time related operations
@@ -53,7 +54,7 @@ class ExcursionBands_cfg:
     tau_max: float = 1.75
 
     # Scaling factor for bands width
-    k: float = 0.09
+    k: float = 0.1
 
 @dataclass(frozen=True)
 class Pivot_transformer_cfg:

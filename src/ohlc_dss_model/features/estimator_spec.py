@@ -11,19 +11,19 @@ class Spec:
 
 
 FULL_DAY_SPEC = Spec(
-    open="O_Asia",
-    high_cols=["H_Asia", "H_London", "H_New York"],
-    low_cols=["L_Asia", "L_London", "L_New York"],
-    close="C_New York",
-    prev_close="C_New York",
+    open="O_Pre_Target_1",
+    high_cols=["H_Pre_Target_1", "H_Pre_Target_2", "H_Target_1", "H_Target_2"],
+    low_cols=["L_Pre_Target_1", "L_Pre_Target_2", "L_Target_1", "L_Target_2"],
+    close="C_Pre_Target_2",
+    prev_close="C_Pre_Target_2",
     label="Sigma_Historical",
 )
 
 PRE_NY_SPEC = Spec(
-    open="O_Asia",
-    high_cols=["H_Asia", "H_London"],
-    low_cols=["L_Asia", "L_London"],
-    close="C_London",
-    prev_close="C_New York",
+    open="O_Pre_Target_1",
+    high_cols=["H_Pre_Target_1", "H_Pre_Target_2"],
+    low_cols=["L_Pre_Target_1", "L_Pre_Target_2"],
+    close="C_Pre_Target_2",
+    prev_close="C_Target_2",
     label="Sigma_Today",
 )

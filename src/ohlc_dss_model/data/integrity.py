@@ -14,7 +14,7 @@ def remove_incomplete_days(df: pl.DataFrame) -> pl.DataFrame:
     valid_days = (
         df.group_by("Session")
         .agg(pl.col("Intraday_Session").n_unique().alias("n_sessions"))
-        .filter(pl.col("n_sessions") == 3)
+        .filter(pl.col("n_sessions") == 4)
         .select("Session")
     )
 
