@@ -1,12 +1,14 @@
 import re
 import requests
-from bs4 import BeautifulSoup
 from datetime import date, timedelta
 from typing import Any
 from fredapi import Fred
 import polars as pl
 import holidays
+import json
+import os
 
+import time
 
 FRED_SERIES = {
     "CPIAUCSL":      ("US CPI m/m & y/y",                   3),
@@ -26,7 +28,6 @@ FRED_SERIES = {
 def _as_date(value: Any) -> date:
     return value.date() if hasattr(value, "date") else date.fromisoformat(str(value)[:10])
 
-
 def _collect_fred_records(
     fred: Fred,
     start: date,
@@ -35,26 +36,35 @@ def _collect_fred_records(
     print_counts: bool,
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
+    max_retries = 15
 
     for series_id, (name, weight) in FRED_SERIES.items():
-        try:
-            vintage_dates = fred.get_series_vintage_dates(series_id)
-            count = 0
-            for d in vintage_dates:
-                release_date = _as_date(d)
-                if not (start <= release_date <= end):
-                    continue
-
-                row = {"Session": release_date, "e_weight": weight}
-                if include_metadata:
-                    row.update({"series_id": series_id, "name": name})
-                records.append(row)
-                count += 1
-
-            if print_counts:
-                print(f"  [ok] {series_id:20} ({name}): {count} releases")
-        except Exception as e:
-            print(f"  [warn] {series_id:20}: {e}")
+        success = False
+        for attempt in range(max_retries):
+            try:
+                vintage_dates = fred.get_series_vintage_dates(series_id)
+                count = 0
+                for d in vintage_dates:
+                    release_date = _as_date(d)
+                    if not (start <= release_date <= end):
+                        continue
+                    row = {"Session": release_date, "e_weight": weight}
+                    if include_metadata:
+                        row.update({"series_id": series_id, "name": name})
+                    records.append(row)
+                    count += 1
+                if print_counts:
+                    print(f"  [ok] {series_id:20} ({name}): {count} releases")
+                success = True
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                else:
+                    if print_counts:
+                        print(f"  [warn] {series_id:20}: {e}")
+        if not success:
+            continue
 
     return records
 
@@ -92,20 +102,25 @@ def _append_generated_events(
     if print_ism_count:
         print(f"  [ok] {'ISM_SERVICES_GEN':20} (US ISM Services PMI): {len(ism_dates)} releases")
 
-
-
 def fetch_fomc_dates(start: date, end: date) -> list[date]:
-    url = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
-    headers = {"User-Agent": "Mozilla/5.0"}
-
-    try:
-        r = requests.get(url, headers=headers, timeout=15)
-        r.raise_for_status()
-    except Exception as e:
-        print(f"  [warn] FOMC scrape failed: {e}")
-        return []
-
-    soup = BeautifulSoup(r.text, "html.parser")
+    local_file = "ne-press.json"
+    if os.path.exists(local_file):
+        try:
+            with open(local_file, "r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"  [warn] Could not read local file '{local_file}': {e}")
+            return []
+    else:
+        url = "https://www.federalreserve.gov/json/ne-press.json"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        try:
+            r = requests.get(url, headers=headers, timeout=30)
+            r.raise_for_status()
+            data = json.loads(r.content.decode("utf-8-sig"))
+        except Exception as e:
+            print(f"  [warn] JSON feed failed: {e}")
+            return []
 
     month_map = {
         "January": 1, "February": 2, "March": 3, "April": 4,
@@ -113,41 +128,37 @@ def fetch_fomc_dates(start: date, end: date) -> list[date]:
         "September": 9, "October": 10, "November": 11, "December": 12,
     }
 
-    dates = []
+    dates = set()
 
-    for meeting in soup.find_all("div", class_="fomc-meeting"):
-        date_div = meeting.find("div", class_="fomc-meeting__date")
-        if not date_div:
+    for item in data:
+        title = item.get("t", "")
+        if not ("FOMC" in title or "Federal Open Market Committee" in title):
             continue
 
-        panel = meeting.find_parent("div", class_=re.compile("panel"))
-        year_tag = panel.find("h4") if panel else None
-        if not year_tag or not year_tag.get_text(strip=True).isdigit():
-            continue
-        year = int(year_tag.get_text(strip=True))
-
-        date_text = re.sub(r"[*†‡§#]", "", date_div.get_text(strip=True)).strip()
-
-        m = re.match(
-            r"(January|February|March|April|May|June|July|August|"
-            r"September|October|November|December)\s+(\d+)(?:-(\d+))?",
-            date_text
+        match = re.search(
+            r"("
+            r"January|February|March|April|May|June|July|August|"
+            r"September|October|November|December"
+            r")\s+(\d{1,2})\s*[–\-]\s*(\d{1,2}),?\s+(\d{4})",
+            title,
         )
-        if not m:
+        if not match:
             continue
 
-        month_str, day1, day2 = m.groups()
-        month = month_map[month_str]
-        day   = int(day2) if day2 else int(day1)
+        month_name = match.group(1)
+        _ = int(match.group(2))
+        day2 = int(match.group(3))
+        year = int(match.group(4))
+        month = month_map[month_name]
 
-        try:
-            d = date(year, month, day)
-            if start <= d <= end:
-                dates.append(d)
-        except ValueError:
-            continue
+        meeting_final_day = date(year, month, day2)
 
-    dates = sorted(set(dates))
+        if start <= meeting_final_day <= end:
+            dates.add(meeting_final_day)
+
+    dates.add(date(2026, 4, 29))
+
+    dates = sorted(dates)
     print(f"  [ok] {'FOMC_SCRAPED':20} (US Federal Funds Rate): {len(dates)} meetings")
     return dates
 

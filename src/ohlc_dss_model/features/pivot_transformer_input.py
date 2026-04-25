@@ -11,13 +11,13 @@ def _get_sigma_historical_shifted(df: pl.DataFrame) -> pl.DataFrame:
 def _calculate_normalized_ohlc(df: pl.DataFrame) -> pl.DataFrame:
     sigma_price = pl.col("Sigma_Historical_Shifted") * pl.col("O_Ref")
     return df.with_columns([
-        ((pl.col("H_Asia") - pl.col("O_Ref")) / sigma_price).alias("H_Asia_Normalized"),
-        ((pl.col("L_Asia") - pl.col("O_Ref")) / sigma_price).alias("L_Asia_Normalized"),
-        ((pl.col("C_Asia") - pl.col("O_Ref")) / sigma_price).alias("C_Asia_Normalized"),
-        ((pl.col("O_London") - pl.col("O_Ref")) / sigma_price).alias("O_London_Normalized"),
-        ((pl.col("H_London") - pl.col("O_Ref")) / sigma_price).alias("H_London_Normalized"),
-        ((pl.col("L_London") - pl.col("O_Ref")) / sigma_price).alias("L_London_Normalized"),
-        ((pl.col("C_London") - pl.col("O_Ref")) / sigma_price).alias("C_London_Normalized"),
+        ((pl.col("H_Pre_Target_1") - pl.col("O_Ref")) / sigma_price).alias("H_Pre_Target_1_Normalized"),
+        ((pl.col("L_Pre_Target_1") - pl.col("O_Ref")) / sigma_price).alias("L_Pre_Target_1_Normalized"),
+        ((pl.col("C_Pre_Target_1") - pl.col("O_Ref")) / sigma_price).alias("C_Pre_Target_1_Normalized"),
+        ((pl.col("O_Pre_Target_2") - pl.col("O_Ref")) / sigma_price).alias("O_Pre_Target_2_Normalized"),
+        ((pl.col("H_Pre_Target_2") - pl.col("O_Ref")) / sigma_price).alias("H_Pre_Target_2_Normalized"),
+        ((pl.col("L_Pre_Target_2") - pl.col("O_Ref")) / sigma_price).alias("L_Pre_Target_2_Normalized"),
+        ((pl.col("C_Pre_Target_2") - pl.col("O_Ref")) / sigma_price).alias("C_Pre_Target_2_Normalized"),
     ])
 
 def _build_context_dataframe(df: pl.DataFrame) -> pl.DataFrame:
@@ -25,24 +25,31 @@ def _build_context_dataframe(df: pl.DataFrame) -> pl.DataFrame:
             .drop_nulls(["Session", *config.pivot_transformer.context_whitelist])
             .sort("Session"))
 
-def _label_construction(df: pl.DataFrame) -> pl.DataFrame:
+def _label_construction(df: pl.DataFrame, target_col: str = "Target_1") -> pl.DataFrame:
     eps = 1e-8
 
-    z_pos = ((pl.col("H_New York") - pl.col("O_New York")).clip(lower_bound=0) / (pl.col("Sigma_Historical") * pl.col("O_New York") + eps))
-    z_neg = ((pl.col("O_New York") - pl.col("L_New York")).clip(lower_bound=0) / (pl.col("Sigma_Historical") * pl.col("O_New York") + eps))
+    z_pos = ((pl.col(f"H_{target_col}") - pl.col(f"O_{target_col}")).clip(lower_bound=0) / (pl.col("Sigma_Historical") * pl.col(f"O_{target_col}") + eps))
+    z_neg = ((pl.col(f"O_{target_col}") - pl.col(f"L_{target_col}")).clip(lower_bound=0) / (pl.col("Sigma_Historical") * pl.col(f"O_{target_col}") + eps))
     label_df = (
-        df.select(["Session", "H_New York", "O_New York", "L_New York", "Sigma_Historical"]).with_columns([
+        df.select(["Session", f"H_{target_col}", f"O_{target_col}", f"L_{target_col}", "Sigma_Historical"]).with_columns([
             z_pos.alias("z_pos"),
             z_neg.alias("z_neg")
         ]).select(["Session", "z_pos", "z_neg"]).drop_nulls().sort("Session")
     )
-    return label_df
+    label_df = label_df.with_columns([
+        (pl.max_horizontal(pl.col("z_pos"), pl.col("z_neg")).alias("z_max")),
+    ])
+    label_df = label_df.with_columns([
+        ((pl.when((pl.col("z_max") >= 0.3) | ((pl.col("z_pos") - pl.col("z_neg")).abs() >= 0.3)).then(pl.lit(0)).otherwise(pl.lit(1))).alias("ambiguous")),
+        ((pl.when(pl.col("z_pos") > pl.col("z_neg")).then(pl.lit(1)).otherwise(pl.lit(-1))).alias("z_dir"))
+    ])
+    return label_df.select(["Session", "z_max", "ambiguous", "z_dir"])
 
-def build_transformer_input(pivots_data: pl.DataFrame, aggregated_data: pl.DataFrame) -> dict:
+def build_transformer_input(pivots_data: pl.DataFrame, aggregated_data: pl.DataFrame, target_col: str = "Target_1") -> dict:
     _df = _get_sigma_historical_shifted(aggregated_data)
     _df = _calculate_normalized_ohlc(_df)
     ctx_df = _build_context_dataframe(_df)
-    label_df = _label_construction(_df)
+    label_df = _label_construction(_df, target_col=target_col)
 
     required = ["Session", *config.pivot_transformer.pivot_numerical_whitelist, *config.pivot_transformer.pivot_categorical_whitelist]
     pivots_df = pivots_data.select(required)
@@ -57,7 +64,7 @@ def build_transformer_input(pivots_data: pl.DataFrame, aggregated_data: pl.DataF
 
     valid_sessions = valid_sessions.filter(pl.col("Session") >= config.pivot_transformer.burn_in_buffer)["Session"].to_list()
 
-    intraday_session_map = {"Asia": 1, "London": 2}
+    intraday_session_map = {"Pre_Target_1": 1, "Pre_Target_2": 2}
     s_k_map = {-1: 0, 1: 1}
 
     Fc = len(config.pivot_transformer.context_whitelist)
@@ -73,7 +80,7 @@ def build_transformer_input(pivots_data: pl.DataFrame, aggregated_data: pl.DataF
     truncated_days = 0
 
     x_tokens, mask, position = [], [], []
-    z_pos_labels, z_neg_labels = [], []
+    z_max_labels, z_dir_labels, ambiguous_labels = [], [], []
     sessions = []
 
     for sess in valid_sessions:
@@ -121,16 +128,18 @@ def build_transformer_input(pivots_data: pl.DataFrame, aggregated_data: pl.DataF
         x_tokens.append(x)
         mask.append(m)
         position.append(p)
-        z_pos_labels.append(float(l_row["z_pos"][0]))
-        z_neg_labels.append(float(l_row["z_neg"][0]))
+        z_max_labels.append(float(l_row["z_max"][0]))
+        z_dir_labels.append(int(l_row["z_dir"][0]))
+        ambiguous_labels.append(int(l_row["ambiguous"][0]))
         sessions.append(sess)
 
     return {
         "X_Tokens": np.stack(x_tokens, axis=0),
         "Attention_Mask": np.stack(mask, axis=0),
         "Token_Position": np.stack(position, axis=0),
-        "Z_Pos_Labels": np.array(z_pos_labels, dtype=np.float32),
-        "Z_Neg_Labels": np.array(z_neg_labels, dtype=np.float32),
+        "Z_Max_Labels": np.array(z_max_labels, dtype=np.float32),
+        "Z_Dir_Labels": np.array(z_dir_labels, dtype=np.int64),
+        "Z_Ambiguous_Labels": np.array(ambiguous_labels, dtype=np.int64),
         "Sessions": sessions,
         "Features_Metadata": {
             "Max_Pivots": max_pivots,

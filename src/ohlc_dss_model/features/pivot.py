@@ -2,18 +2,18 @@ import polars as pl
 
 def _join_aggregated_data(pivots: pl.DataFrame, aggregated_data: pl.DataFrame) -> pl.DataFrame:
     shifted_aggregated_data = aggregated_data.with_columns([
-        pl.col("Sigma_Historical").shift(1).alias("Sigma_Historical")
+        pl.col("Sigma_Historical").shift(1).alias("Sigma_Historical_Shifted")
     ])
     return pivots.join(shifted_aggregated_data, on="Session", how="left")
 
 def _calculate_Pi_k(pivots: pl.DataFrame) -> pl.DataFrame:
     return pivots.with_columns([
-        ((pl.col("P_k") - pl.col("O_Ref")) / (pl.col("Sigma_Historical") * pl.col("O_Ref"))).alias("Pi_k")
+        ((pl.col("P_k") - pl.col("O_Ref")) / (pl.col("Sigma_Historical_Shifted") * pl.col("O_Ref"))).alias("Pi_k")
     ])
 
 def _calculate_sigma_price(pivots: pl.DataFrame) -> pl.DataFrame:
     return pivots.with_columns([
-        (pl.col("Sigma_Historical") * pl.col("O_Ref")).alias("Sigma_Price")
+        (pl.col("Sigma_Historical_Shifted") * pl.col("O_Ref")).alias("Sigma_Price")
     ])
 
 def _calculate_bands_delta(pivots: pl.DataFrame) -> pl.DataFrame:
@@ -71,11 +71,12 @@ def _calculate_temporal_dynamics(pivots: pl.DataFrame) -> pl.DataFrame:
 
 def detect_pivots(
     df_bars: pl.DataFrame,
+    sessions: list = ["Pre_Target_1", "Pre_Target_2"],
     n: int = 2,
 ) -> pl.DataFrame:
 
     pre_ny = df_bars.filter(
-        pl.col("Intraday_Session").is_in(["Asia", "London"])
+        pl.col("Intraday_Session").is_in(sessions)
     )
 
     shift_cols = []
