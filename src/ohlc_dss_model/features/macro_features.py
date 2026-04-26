@@ -3,7 +3,9 @@ import numpy as np
 
 from fredapi import Fred
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, List, Set
+
+import time
 
 from ohlc_dss_model.features import fetch_fomc_dates
 
@@ -52,35 +54,57 @@ def build_fred_macro(
         sessions: pl.DataFrame,
         api_key: str,
         start_date: str,
-        end_date: str
+        end_date: str,
+        max_retries: int = 15,
+        base_delay: float = 1.0,
+        ratelimit_delay: float = 0.1
     ) -> pl.DataFrame:
 
     fred = Fred(api_key=api_key)
     start = start_date - timedelta(days=260)
     frames: list[pl.DataFrame] = []
 
-    for id, col_name in _FRED.items():
-        try:
-            s = fred.get_series(series_id=id, observation_start=start, observation_end=end_date)
+    for idx, (id, col_name) in enumerate(_FRED.items()):
+        if idx > 0 and ratelimit_delay:
+            time.sleep(ratelimit_delay)
 
-            df = (
-                pl.DataFrame({
-                    "Date": pl.Series(
-                        [_as_date(d) for d in s.index], dtype=pl.Date
-                    ),
-                    col_name: pl.Series(s.values, dtype=pl.Float64),
-                })
-                .drop_nulls(col_name)
-                .sort("Date")
-            )
-            frames.append(df)
-            print(f"[ok] FRED {id:10} → {col_name}: {df.height} observations")
-        except Exception as e:
-            print(f"[WARN] {id}: {e}")
+        data_acquired = False
+        for attempt in range(1, max_retries + 1):
+            try:
+                s = fred.get_series(
+                    series_id=id,
+                    observation_start=start,
+                    observation_end=end_date
+                )
+                data_acquired = True
+                break
+            except Exception as e:
+                if attempt == max_retries:
+                    print(f"[FAIL] {id} : {e}  (all {max_retries} attempts exhausted)")
+                else:
+                    wait = base_delay
+                    print(f"[WARN] {id} attempt {attempt}/{max_retries}: {e}  (retrying in {wait:.1f}s)")
+                    time.sleep(wait)
+
+        if not data_acquired:
+            continue
+
+        df = (
+            pl.DataFrame({
+                "Date": pl.Series(
+                    [_as_date(d) for d in s.index], dtype=pl.Date
+                ),
+                col_name: pl.Series(s.values, dtype=pl.Float64),
+            })
+            .drop_nulls(col_name)
+            .sort("Date")
+        )
+        frames.append(df)
+        print(f"[ok] FRED {id:10} → {col_name}: {df.height} observations")
 
     if not frames:
         raise RuntimeError("No FRED data could be fetched")
-    
+
     macro = frames[0]
     for frame in frames[1:]:
         macro = macro.join(frame, on="Date", how="outer_coalesce").sort("Date")
@@ -122,46 +146,60 @@ def build_fred_macro(
         strategy="backward",
     )
 
-    return result
+    return result.select([
+        "Session", 
+        "vix_t1", "us10y_t1", "us2y_t1", "effr_t1", "10y_2y_spread_t1", "vix_pct_rank_1y_t1",
+        "vix_5d_delta", "us10y_5d_delta"
+    ])
 
 def build_individual_event_flags(
     sessions: pl.DataFrame,
     api_key: str,
     start: date,
     end: date,
+    max_retries: int = 15,
+    base_delay: float = 1.0,
 ) -> pl.DataFrame:
     fred = Fred(api_key=api_key)
- 
+    end = end + timedelta(49)
     fomc_buffer_start = start
-    fomc_dates: list[date] = sorted(fetch_fomc_dates(fomc_buffer_start, end))
+    fomc_dates: List[date] = sorted(fetch_fomc_dates(fomc_buffer_start, end))
     fomc_set = set(fomc_dates)
     print(f"  [ok] FOMC dates fetched: {len(fomc_dates)}")
  
-    def _vintage_set(series_id: str) -> set[date]:
-        try:
-            vdates = fred.get_series_vintage_dates(series_id)
-            s = {_as_date(d) for d in vdates if start <= _as_date(d) <= end}
-            print(f"  [ok] {series_id:12} vintage dates: {len(s)}")
-            return s
-        except Exception as exc:
-            print(f"  [warn] {series_id}: {exc}")
-            return set()
+    def _vintage_set(series_id: str) -> Set[date]:
+        data_acquired = False
+        for attempt in range(1, max_retries + 1):
+            try:
+                vdates = fred.get_series_vintage_dates(series_id)
+                data_acquired = True
+                break
+            except Exception as exc:
+                if attempt == max_retries:
+                    print(f"  [fail] {series_id}: {exc}  (all {max_retries} attempts exhausted)")
+                    return set()
+                wait = base_delay
+                print(f"  [warn] {series_id} attempt {attempt}/{max_retries}: {exc}  (retrying in {wait:.1f}s)")
+                time.sleep(wait)
+
+        s = {_as_date(d) for d in vdates if start <= _as_date(d) <= end}
+        print(f"  [ok] {series_id:12} vintage dates: {len(s)}")
+        return s
  
     nfp_dates      = _vintage_set("PAYEMS")
     cpi_dates      = _vintage_set("CPIAUCSL")
     core_cpi_dates = _vintage_set("CPILFESL")
  
-    session_list: list[date] = sessions["Session"].to_list()
+    session_list: List[date] = sessions["Session"].to_list()
  
-    is_fomc_day:      list[bool]        = []
-    is_fomc_week:     list[bool]        = []
-    days_to_fomc_arr: list[int | None]  = []
-    is_nfp:           list[bool]        = []
-    is_cpi:           list[bool]        = []
-    is_core_cpi:      list[bool]        = []
+    is_fomc_day:      List[bool]        = []
+    is_fomc_week:     List[bool]        = []
+    days_to_fomc_arr: List[int | None]  = []
+    is_nfp:           List[bool]        = []
+    is_cpi:           List[bool]        = []
+    is_core_cpi:      List[bool]        = []
  
     for sess in session_list:
-        # FOMC
         is_fomc_day.append(sess in fomc_set)
  
         iso = sess.isocalendar()
@@ -192,4 +230,11 @@ def build_individual_event_flags(
         f"  [info] Individual flags — FOMC days: {sum(is_fomc_day)}, "
         f"NFP: {sum(is_nfp)}, CPI: {sum(is_cpi)}, "
     )
-    return result
+    return result.select(["Session", "is_fomc_day", "is_fomc_week", "days_to_fomc", "is_nfp_day", "is_cpi_day", "is_core_cpi_day"])
+
+def get_calendar_index(df: pl.DataFrame) -> pl.DataFrame:
+    return df.with_columns([
+        pl.col("Session").dt.weekday().alias("day_of_week"),
+        pl.col("Session").dt.month().alias("month"),
+        ((pl.col("Session").dt.day() - 1) // 7 + 1).alias("week_of_month"),
+    ])

@@ -45,9 +45,69 @@ def _label_construction(df: pl.DataFrame, target_col: str = "Target_1") -> pl.Da
     ])
     return label_df.select(["Session", "z_max", "ambiguous", "z_dir"])
 
+def _calculate_range_features(df: pl.DataFrame) -> pl.DataFrame:
+    sigma_price = pl.col("Sigma_Historical_Shifted") * pl.col("O_Ref")
+    eps = 1e-9
+    df = df.with_columns([
+        ((pl.col("H_Pre_Target_2") - pl.col("L_Pre_Target_2")) / sigma_price).alias("ps2_range_norm"),
+
+        ((pl.col("H_Pre_Target_1") - pl.col("L_Pre_Target_1")) / sigma_price).alias("ps1_range_norm"),
+
+        ((pl.col("C_Pre_Target_2") - pl.col("L_Pre_Target_2")) /
+        (pl.col("H_Pre_Target_2") - pl.col("L_Pre_Target_2") + eps))
+        .alias("ps2_close_pct_within_ps2_range"),
+
+        ((pl.col("C_Pre_Target_1") - pl.col("L_Pre_Target_1")) /
+        (pl.col("H_Pre_Target_1") - pl.col("L_Pre_Target_1") + eps))
+        .alias("ps1_close_pct_within_ps1_range"),
+
+        ((pl.col("O_Target_1") - pl.col("C_Pre_Target_2")) / sigma_price)
+        .alias("target_open_gap_norm"),
+
+        (pl.col("C_Pre_Target_1") > pl.col("O_Pre_Target_1")).alias("_ps1_bull"),
+        (pl.col("C_Pre_Target_2") > pl.col("O_Pre_Target_2")).alias("_ps2_bull"),
+    ]).with_columns([
+        (pl.col("ps2_range_norm") / (pl.col("ps1_range_norm") + eps))
+        .alias("ps2_vs_ps1_range_ratio"),
+
+        (pl.col("_ps1_bull") == pl.col("_ps2_bull")).alias("sessions_agree"),
+    ]).drop(["_ps1_bull", "_ps2_bull"])
+
+def _calculate_ma_features(df: pl.DataFrame) -> pl.DataFrame:
+    return df.with_columns([
+        pl.col("C_Target_2").shift(1).alias("_prior_close"),
+    ]).with_columns([
+        pl.col("_prior_close").rolling_mean(20).alias("_ma20"),
+        pl.col("_prior_close").rolling_mean(200).alias("_ma200"),
+        (pl.col("_prior_close") / pl.col("_prior_close").shift(5) - 1.0).alias("nq_5d_return"),
+        (pl.col("_prior_close") / pl.col("_prior_close").shift(20) - 1.0).alias("nq_20d_return"),
+    ]).with_columns([
+        (pl.col("_prior_close") > pl.col("_ma20")).alias("nq_above_20d_ma"),
+        (pl.col("_prior_close") > pl.col("_ma200")).alias("nq_above_200d_ma"),
+        ((pl.col("_prior_close") - pl.col("_ma20")) /
+        (pl.col("Sigma_Historical") * pl.col("O_Ref") + 1e-9))
+        .alias("nq_dist_from_20d_ma_norm"),
+    ]).drop(["_prior_close", "_ma20", "_ma200"])
+
+def _get_ps2_band_state(df: pl.DataFrame) -> pl.DataFrame:
+    return df.with_columns(
+        pl.when(pl.col("C_Pre_Target_2") > pl.col("Band_FE_Pos_Upper")).then(pl.lit(6))
+        .when(pl.col("C_Pre_Target_2") >= pl.col("Band_FE_Pos_Lower")).then(pl.lit(4))
+        .when(pl.col("C_Pre_Target_2") >= pl.col("Band_AE_Pos_Upper")).then(pl.lit(2))
+        .when(pl.col("C_Pre_Target_2") > pl.col("Band_AE_Neg_Upper")).then(pl.lit(1))
+        .when(pl.col("C_Pre_Target_2") >= pl.col("Band_AE_Neg_Lower")).then(pl.lit(1))
+        .when(pl.col("C_Pre_Target_2") >= pl.col("Band_FE_Neg_Upper")).then(pl.lit(3))
+        .when(pl.col("C_Pre_Target_2") >= pl.col("Band_FE_Neg_Lower")).then(pl.lit(5))
+        .otherwise(pl.lit(7))
+        .alias("band_state_ps2")
+    )
+
 def build_transformer_input(pivots_data: pl.DataFrame, aggregated_data: pl.DataFrame, target_col: str = "Target_1") -> dict:
     _df = _get_sigma_historical_shifted(aggregated_data)
-    _df = _calculate_normalized_ohlc(_df)
+    _df = _calculate_range_features(_df)
+    _df = _calculate_ma_features(_df)
+    _df = _get_ps2_band_state(_df)
+    # _df = _calculate_normalized_ohlc(_df)
     ctx_df = _build_context_dataframe(_df)
     label_df = _label_construction(_df, target_col=target_col)
 

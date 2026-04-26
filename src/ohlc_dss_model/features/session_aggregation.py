@@ -16,3 +16,4 @@ def aggregate_sessions(df: pl.DataFrame) -> pl.DataFrame:
         )
         .sort("Session")
     )
+
