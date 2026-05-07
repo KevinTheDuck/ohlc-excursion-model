@@ -24,6 +24,6 @@ PRE_NY_SPEC = Spec(
     high_cols=["H_Pre_Target_1", "H_Pre_Target_2"],
     low_cols=["L_Pre_Target_1", "L_Pre_Target_2"],
     close="C_Pre_Target_2",
-    prev_close="C_Target_2",
+    prev_close="_prior_close",
     label="Sigma_Today",
 )

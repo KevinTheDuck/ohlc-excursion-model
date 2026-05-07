@@ -208,3 +208,8 @@ __marimo__/
 
 data/raw/*
 data/processed/*
+strategy_development/*
+reports/*
+notebooks/approaches/strategy/*
+AGENTS.md
+notebooks/approaches/band_model/BAND_MODEL.md
