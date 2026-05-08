@@ -7,7 +7,10 @@ import pytest
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "raw" / "nq_30m.parquet"
 pytestmark = pytest.mark.skipif(
     not DATA_FILE.exists(),
-    reason=f"Required data file not found at {DATA_FILE}. Populate data/raw to run tests.",
+    reason=(
+        f"Required data file not found at {DATA_FILE}. "
+        "Populate data/raw/nq_30m.parquet to run excursion band tests."
+    ),
 )
 
 N = 20
