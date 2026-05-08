@@ -8,3 +8,18 @@ Follow the official installation guide: [https://nix.dev/install-nix.html](https
 ```bash
 nix develop
 ```
+
+## 3. Run Tests
+In the Nix dev shell:
+```bash
+python -m pytest
+```
+
+Tests expect local parquet data at `data/raw/nq_30m.parquet`. If the file is missing,
+the excursion band tests will be skipped.
+
+Outside Nix:
+```bash
+python -m pip install -e .[test]
+python -m pytest
+```
