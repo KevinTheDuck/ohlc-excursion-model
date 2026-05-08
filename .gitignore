@@ -1,6 +1,6 @@
 # Docs
-band_model.pdf
-band_model_extra.md
+# band_model.pdf
+# band_model_extra.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -210,8 +210,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-data/raw/*
-data/processed/*
+# data/raw/*
+# data/processed/*
 strategy_development/*
 reports/*
 notebooks/approaches/strategy/*
