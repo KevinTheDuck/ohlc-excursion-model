@@ -9,6 +9,7 @@ def sort_data(
 ) -> pl.DataFrame:
     return df.sort(col, descending=descending)
 
+
 # remove days with incomplete session count
 def remove_incomplete_days(df: pl.DataFrame) -> pl.DataFrame:
     valid_days = (

@@ -4,6 +4,7 @@ from ohlc_dss_model.config import config
 from datetime import time
 import exchange_calendars as xcals
 
+
 # we tag the data to seperate define a daily candle
 # each session represents a single daily candle
 def session_tagging(
@@ -57,15 +58,15 @@ def intraday_session_tagging(
 
     return df.filter(pl.col("Intraday_Session") != "Closed")
 
+
 # Remove holidays and non trading days
-def filter_valid_sessions(df: pl.DataFrame, calendar_name: str = "XNYS") -> pl.DataFrame:
+def filter_valid_sessions(
+    df: pl.DataFrame, calendar_name: str = "XNYS"
+) -> pl.DataFrame:
     cal = xcals.get_calendar(calendar_name)
-    
+
     sessions = df["Session"].unique().to_list()
-    
-    valid_sessions = {
-        s for s in sessions
-        if cal.is_session(s)
-    }
-    
+
+    valid_sessions = {s for s in sessions if cal.is_session(s)}
+
     return df.filter(pl.col("Session").is_in(list(valid_sessions)))

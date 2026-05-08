@@ -57,24 +57,39 @@ def calculate_range_pct_rank(df: pl.DataFrame) -> pl.DataFrame:
         ]
     )
 
+
 def calculate_vpin_range_structure(df: pl.DataFrame) -> pl.DataFrame:
     bullish_breach = pl.col("band_state_ps2").is_in([2, 4, 6])
     bearish_breach = pl.col("band_state_ps2").is_in([3, 5, 7])
 
-    return (
-        df
-        .with_columns([
-            pl.col("vpin_ps1").rolling_map(_pct_rank, window_size=21).alias("vpin_ps1_pct_rank_20d"),
-            pl.col("vpin_ps2").rolling_map(_pct_rank, window_size=21).alias("vpin_ps2_pct_rank_20d"),
-        ])
-        .with_columns([
+    return df.with_columns(
+        [
+            pl.col("vpin_ps1")
+            .rolling_map(_pct_rank, window_size=21)
+            .alias("vpin_ps1_pct_rank_20d"),
+            pl.col("vpin_ps2")
+            .rolling_map(_pct_rank, window_size=21)
+            .alias("vpin_ps2_pct_rank_20d"),
+        ]
+    ).with_columns(
+        [
             (pl.col("vpin_ps2") - pl.col("vpin_ps1")).alias("vpin_trend"),
-            (pl.col("ofi_cumulative_ps1") * pl.col("ofi_cumulative_ps2") > 0).alias("ofi_ps1_ps2_agree"),
-            (pl.col("total_volume_ps2") / (pl.col("total_volume_ps2").rolling_mean(20) + 1e-9) - 1.0).alias("ps2_volume_zscore_20d"),
-            (pl.col("total_volume_ps1") / (pl.col("total_volume_ps1").rolling_mean(20) + 1e-9) - 1.0).alias("ps1_volume_zscore_20d"),
+            (pl.col("ofi_cumulative_ps1") * pl.col("ofi_cumulative_ps2") > 0).alias(
+                "ofi_ps1_ps2_agree"
+            ),
             (
-                (bullish_breach & (pl.col("ofi_cumulative_ps2") > 0)) |
-                (bearish_breach & (pl.col("ofi_cumulative_ps2") < 0))
+                pl.col("total_volume_ps2")
+                / (pl.col("total_volume_ps2").rolling_mean(20) + 1e-9)
+                - 1.0
+            ).alias("ps2_volume_zscore_20d"),
+            (
+                pl.col("total_volume_ps1")
+                / (pl.col("total_volume_ps1").rolling_mean(20) + 1e-9)
+                - 1.0
+            ).alias("ps1_volume_zscore_20d"),
+            (
+                (bullish_breach & (pl.col("ofi_cumulative_ps2") > 0))
+                | (bearish_breach & (pl.col("ofi_cumulative_ps2") < 0))
             ).alias("ofi_band_breach_confirm"),
-        ])
+        ]
     )

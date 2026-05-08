@@ -126,19 +126,25 @@ def compute_ofi_vpin(
         )
 
     if keep_cumulative:
-        return bars_1m.drop(
-            ["_bar_move", "sigma_bar", "_phi", "buy_volume", "sell_volume"]
-        ), ofi_wide
-    return bars_1m.drop(
-        [
-            "_bar_move",
-            "sigma_bar",
-            "_phi",
-            "buy_volume",
-            "sell_volume",
-            "_cum_ofi",
-            "_cum_abs_ofi",
-            "_cum_vol",
-            "ofi_bar",
-        ]
-    ), ofi_wide
+        return (
+            bars_1m.drop(
+                ["_bar_move", "sigma_bar", "_phi", "buy_volume", "sell_volume"]
+            ),
+            ofi_wide,
+        )
+    return (
+        bars_1m.drop(
+            [
+                "_bar_move",
+                "sigma_bar",
+                "_phi",
+                "buy_volume",
+                "sell_volume",
+                "_cum_ofi",
+                "_cum_abs_ofi",
+                "_cum_vol",
+                "ofi_bar",
+            ]
+        ),
+        ofi_wide,
+    )

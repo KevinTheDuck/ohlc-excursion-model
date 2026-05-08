@@ -80,12 +80,14 @@ def compute_session_vwap(
     session_vwap_wide = session_vwap_wide.join(pre_combined, on="Session", how="left")
 
     if keep_cumulative:
-        return bars_1m.drop(
-            ["_tp_vol", "typical_price", "_cum_tp_vol"]
-        ), session_vwap_wide
-    return bars_1m.drop(
-        ["_tp_vol", "typical_price", "_cum_tp_vol", "_cum_vol"]
-    ), session_vwap_wide
+        return (
+            bars_1m.drop(["_tp_vol", "typical_price", "_cum_tp_vol"]),
+            session_vwap_wide,
+        )
+    return (
+        bars_1m.drop(["_tp_vol", "typical_price", "_cum_tp_vol", "_cum_vol"]),
+        session_vwap_wide,
+    )
 
 
 def get_vwap_position(df: pl.DataFrame) -> pl.DataFrame:

@@ -4,7 +4,7 @@ import polars as pl
 def calculate_momentum_features(df: pl.DataFrame) -> pl.DataFrame:
     sigma_price = pl.col("Sigma_Historical").shift(1) * pl.col("O_Ref")
     momentum = (
-        df.with_columns([(pl.col("C_Target_2").shift(1).alias("_prior_close"))])
+        df.with_columns([pl.col("C_Target_2").shift(1).alias("_prior_close")])
         .with_columns(
             [
                 (pl.col("_prior_close").rolling_mean(20).alias("_ma_20")),

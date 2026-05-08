@@ -2,16 +2,27 @@ import polars as pl
 
 from ohlc_dss_model.config import config
 
-# Private 
+
+# Private
 def _calculate_z_body(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns(
-        ((pl.col("C_Target_2") / pl.col("O_Ref")).log().abs() / pl.col("Sigma_Historical")).alias("Z_Body")
+        (
+            (pl.col("C_Target_2") / pl.col("O_Ref")).log().abs()
+            / pl.col("Sigma_Historical")
+        ).alias("Z_Body")
     )
 
-def _calculate_z_sigma(df: pl.DataFrame, n: int = config.excursion_bands.n) -> pl.DataFrame:
+
+def _calculate_z_sigma(
+    df: pl.DataFrame, n: int = config.excursion_bands.n
+) -> pl.DataFrame:
     return df.with_columns(
-        (pl.col("Sigma_Historical") / pl.col("Sigma_Historical").rolling_mean(n).shift(1)).alias("Z_Sigma")
+        (
+            pl.col("Sigma_Historical")
+            / pl.col("Sigma_Historical").rolling_mean(n).shift(1)
+        ).alias("Z_Sigma")
     )
+
 
 def _calculate_threshold(
     df: pl.DataFrame,
@@ -23,68 +34,125 @@ def _calculate_threshold(
         (tau_0 * (pl.col("Z_Sigma") ** -0.5)).clip(tau_min, tau_max).alias("Tau")
     )
 
+
 def _get_day_boundaries(df: pl.DataFrame) -> pl.DataFrame:
-    return df.with_columns([
-        pl.min_horizontal(pl.col("L_Pre_Target_1"), pl.col("L_Pre_Target_2"), pl.col("L_Target_1"), pl.col("L_Target_2")).alias("L_Day"),
-        pl.max_horizontal(pl.col("H_Pre_Target_1"), pl.col("H_Pre_Target_2"), pl.col("H_Target_1"), pl.col("H_Target_2")).alias("H_Day")
-    ])
+    return df.with_columns(
+        [
+            pl.min_horizontal(
+                pl.col("L_Pre_Target_1"),
+                pl.col("L_Pre_Target_2"),
+                pl.col("L_Target_1"),
+                pl.col("L_Target_2"),
+            ).alias("L_Day"),
+            pl.max_horizontal(
+                pl.col("H_Pre_Target_1"),
+                pl.col("H_Pre_Target_2"),
+                pl.col("H_Target_1"),
+                pl.col("H_Target_2"),
+            ).alias("H_Day"),
+        ]
+    )
+
 
 def _calculate_epsilon(df: pl.DataFrame) -> pl.DataFrame:
-    return df.with_columns([
-        (
-            pl.when(pl.col("Direction") == "bullish")
-            .then(pl.col("O_Ref") - pl.col("L_Day"))
-            .when(pl.col("Direction") == "bearish")
-            .then(pl.col("H_Day") - pl.col("O_Ref"))
-            .otherwise(pl.max_horizontal(pl.col("H_Day") - pl.col("O_Ref"), pl.col("O_Ref") - pl.col("L_Day")))
-        ).alias("_epsilon_ae"),
-        (
-            pl.when(pl.col("Direction") == "bullish")
-            .then(pl.col("H_Day") - pl.col("O_Ref"))
-            .when(pl.col("Direction") == "bearish")
-            .then(pl.col("O_Ref") - pl.col("L_Day"))
-            .otherwise(pl.max_horizontal(pl.col("H_Day") - pl.col("O_Ref"), pl.col("O_Ref") - pl.col("L_Day")))
-        ).alias("_epsilon_fe")
-    ])
+    return df.with_columns(
+        [
+            (
+                pl.when(pl.col("Direction") == "bullish")
+                .then(pl.col("O_Ref") - pl.col("L_Day"))
+                .when(pl.col("Direction") == "bearish")
+                .then(pl.col("H_Day") - pl.col("O_Ref"))
+                .otherwise(
+                    pl.max_horizontal(
+                        pl.col("H_Day") - pl.col("O_Ref"),
+                        pl.col("O_Ref") - pl.col("L_Day"),
+                    )
+                )
+            ).alias("_epsilon_ae"),
+            (
+                pl.when(pl.col("Direction") == "bullish")
+                .then(pl.col("H_Day") - pl.col("O_Ref"))
+                .when(pl.col("Direction") == "bearish")
+                .then(pl.col("O_Ref") - pl.col("L_Day"))
+                .otherwise(
+                    pl.max_horizontal(
+                        pl.col("H_Day") - pl.col("O_Ref"),
+                        pl.col("O_Ref") - pl.col("L_Day"),
+                    )
+                )
+            ).alias("_epsilon_fe"),
+        ]
+    )
+
 
 def _normalize_epsilon(df: pl.DataFrame) -> pl.DataFrame:
-    return df.with_columns([
-        (pl.col("_epsilon_ae") / pl.col("Sigma_Historical")).alias("_epsilon_ae_normalized"),
-        (pl.col("_epsilon_fe") / pl.col("Sigma_Historical")).alias("_epsilon_fe_normalized")
-    ])
+    return df.with_columns(
+        [
+            (pl.col("_epsilon_ae") / pl.col("Sigma_Historical")).alias(
+                "_epsilon_ae_normalized"
+            ),
+            (pl.col("_epsilon_fe") / pl.col("Sigma_Historical")).alias(
+                "_epsilon_fe_normalized"
+            ),
+        ]
+    )
+
 
 def _calculate_mu(df: pl.DataFrame, n: int = config.excursion_bands.n) -> pl.DataFrame:
-    return df.with_columns([
-        (pl.col("_epsilon_ae_normalized").shift(1).rolling_mean(n)).alias("_mu_ae"),
-        (pl.col("_epsilon_fe_normalized").shift(1).rolling_mean(n)).alias("_mu_fe")
-    ])
+    return df.with_columns(
+        [
+            (pl.col("_epsilon_ae_normalized").shift(1).rolling_mean(n)).alias("_mu_ae"),
+            (pl.col("_epsilon_fe_normalized").shift(1).rolling_mean(n)).alias("_mu_fe"),
+        ]
+    )
+
 
 def _calculate_mu_scaled(df: pl.DataFrame) -> pl.DataFrame:
-    return df.with_columns([
-        (pl.col("_mu_ae") * pl.col("Sigma_Historical").shift(1)).alias("_mu_ae_scaled"),
-        (pl.col("_mu_fe") * pl.col("Sigma_Historical").shift(1)).alias("_mu_fe_scaled")
-    ])
+    return df.with_columns(
+        [
+            (pl.col("_mu_ae") * pl.col("Sigma_Historical").shift(1)).alias(
+                "_mu_ae_scaled"
+            ),
+            (pl.col("_mu_fe") * pl.col("Sigma_Historical").shift(1)).alias(
+                "_mu_fe_scaled"
+            ),
+        ]
+    )
 
-def _calculate_delta_t(df: pl.DataFrame, k: float = config.excursion_bands.k) -> pl.DataFrame:
-    return df.with_columns([
-        (k * pl.col("Sigma_Historical").shift(1) * pl.col("O_Ref")).alias("_delta_t")
-    ])
+
+def _calculate_delta_t(
+    df: pl.DataFrame, k: float = config.excursion_bands.k
+) -> pl.DataFrame:
+    return df.with_columns(
+        [(k * pl.col("Sigma_Historical").shift(1) * pl.col("O_Ref")).alias("_delta_t")]
+    )
+
 
 # Public
 def assign_direction(df: pl.DataFrame) -> pl.DataFrame:
     df = _calculate_z_body(df)
     df = _calculate_z_sigma(df)
     df = _calculate_threshold(df)
-    
+
     return df.with_columns(
-        pl.when((pl.col("Z_Body") > pl.col("Tau")) & (pl.col("C_Target_2") > pl.col("O_Ref")))
+        pl.when(
+            (pl.col("Z_Body") > pl.col("Tau"))
+            & (pl.col("C_Target_2") > pl.col("O_Ref"))
+        )
         .then(pl.lit("bullish"))
-        .when((pl.col("Z_Body") > pl.col("Tau")) & (pl.col("C_Target_2") < pl.col("O_Ref")))
+        .when(
+            (pl.col("Z_Body") > pl.col("Tau"))
+            & (pl.col("C_Target_2") < pl.col("O_Ref"))
+        )
         .then(pl.lit("bearish"))
-        .otherwise(pl.lit("neutral")).alias("Direction")
+        .otherwise(pl.lit("neutral"))
+        .alias("Direction")
     )
 
-def calculate_excursion_bands(df: pl.DataFrame, n: int = config.excursion_bands.n) -> pl.DataFrame:
+
+def calculate_excursion_bands(
+    df: pl.DataFrame, n: int = config.excursion_bands.n
+) -> pl.DataFrame:
     df = assign_direction(df)
     df = _get_day_boundaries(df)
     df = _calculate_epsilon(df)
@@ -93,30 +161,57 @@ def calculate_excursion_bands(df: pl.DataFrame, n: int = config.excursion_bands.
     df = _calculate_mu_scaled(df)
     df = _calculate_delta_t(df)
 
-    df = df.with_columns([
-        (pl.col("O_Ref") + pl.col("_mu_ae_scaled")).alias("Band_AE_Pos_Center"),
-        (pl.col("O_Ref") - pl.col("_mu_ae_scaled")).alias("Band_AE_Neg_Center"),
-        (pl.col("O_Ref") + pl.col("_mu_fe_scaled")).alias("Band_FE_Pos_Center"),
-        (pl.col("O_Ref") - pl.col("_mu_fe_scaled")).alias("Band_FE_Neg_Center")
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("O_Ref") + pl.col("_mu_ae_scaled")).alias("Band_AE_Pos_Center"),
+            (pl.col("O_Ref") - pl.col("_mu_ae_scaled")).alias("Band_AE_Neg_Center"),
+            (pl.col("O_Ref") + pl.col("_mu_fe_scaled")).alias("Band_FE_Pos_Center"),
+            (pl.col("O_Ref") - pl.col("_mu_fe_scaled")).alias("Band_FE_Neg_Center"),
+        ]
+    )
 
-    df = df.with_columns([
-        (pl.col("Band_AE_Neg_Center") + pl.col("_delta_t")).alias("Band_AE_Neg_Upper"),
-        (pl.col("Band_AE_Neg_Center") - pl.col("_delta_t")).alias("Band_AE_Neg_Lower"),
-        (pl.col("Band_AE_Pos_Center") + pl.col("_delta_t")).alias("Band_AE_Pos_Upper"),
-        (pl.col("Band_AE_Pos_Center") - pl.col("_delta_t")).alias("Band_AE_Pos_Lower"),
-        (pl.col("Band_FE_Neg_Center") + pl.col("_delta_t")).alias("Band_FE_Neg_Upper"),
-        (pl.col("Band_FE_Neg_Center") - pl.col("_delta_t")).alias("Band_FE_Neg_Lower"),
-        (pl.col("Band_FE_Pos_Center") + pl.col("_delta_t")).alias("Band_FE_Pos_Upper"),
-        (pl.col("Band_FE_Pos_Center") - pl.col("_delta_t")).alias("Band_FE_Pos_Lower")
-    ])
-    
-    return df.drop([
-            "L_Day", "H_Day",
-            "_epsilon_ae", "_epsilon_fe", 
-            "_epsilon_ae_normalized", "_epsilon_fe_normalized", 
-            "_mu_ae", "_mu_fe",
-            "_mu_ae_scaled", "_mu_fe_scaled",
+    df = df.with_columns(
+        [
+            (pl.col("Band_AE_Neg_Center") + pl.col("_delta_t")).alias(
+                "Band_AE_Neg_Upper"
+            ),
+            (pl.col("Band_AE_Neg_Center") - pl.col("_delta_t")).alias(
+                "Band_AE_Neg_Lower"
+            ),
+            (pl.col("Band_AE_Pos_Center") + pl.col("_delta_t")).alias(
+                "Band_AE_Pos_Upper"
+            ),
+            (pl.col("Band_AE_Pos_Center") - pl.col("_delta_t")).alias(
+                "Band_AE_Pos_Lower"
+            ),
+            (pl.col("Band_FE_Neg_Center") + pl.col("_delta_t")).alias(
+                "Band_FE_Neg_Upper"
+            ),
+            (pl.col("Band_FE_Neg_Center") - pl.col("_delta_t")).alias(
+                "Band_FE_Neg_Lower"
+            ),
+            (pl.col("Band_FE_Pos_Center") + pl.col("_delta_t")).alias(
+                "Band_FE_Pos_Upper"
+            ),
+            (pl.col("Band_FE_Pos_Center") - pl.col("_delta_t")).alias(
+                "Band_FE_Pos_Lower"
+            ),
+        ]
+    )
+
+    return df.drop(
+        [
+            "L_Day",
+            "H_Day",
+            "_epsilon_ae",
+            "_epsilon_fe",
+            "_epsilon_ae_normalized",
+            "_epsilon_fe_normalized",
+            "_mu_ae",
+            "_mu_fe",
+            "_mu_ae_scaled",
+            "_mu_fe_scaled",
             # "Band_AE_Pos_Center", "Band_AE_Neg_Center", "Band_FE_Pos_Center", "Band_FE_Neg_Center",
             # "_delta_t"
-        ])
+        ]
+    )
