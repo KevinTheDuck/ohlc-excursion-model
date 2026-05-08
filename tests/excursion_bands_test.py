@@ -5,12 +5,9 @@ import polars as pl
 import pytest
 
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "raw" / "nq_30m.parquet"
-pytestmark = pytest.mark.skipif(
-    not DATA_FILE.exists(),
-    reason=(
-        f"Required data file not found at {DATA_FILE}. "
-        "Populate data/raw/nq_30m.parquet to run excursion band tests."
-    ),
+SKIP_REASON = (
+    f"Required data file not found at {DATA_FILE}. "
+    "Populate data/raw/nq_30m.parquet to run excursion band tests."
 )
 
 N = 20
@@ -100,6 +97,7 @@ def _assert_finite_bands(last_row: pl.DataFrame) -> None:
         assert math.isfinite(value)
 
 
+@pytest.mark.skipif(not DATA_FILE.exists(), reason=SKIP_REASON)
 def test_excursion_bands_last_candle_without_ny_session_has_no_leak():
     window_df, last_session = _prepare_window_without_last_ny()
     result = _run_excursion_pipeline(window_df)

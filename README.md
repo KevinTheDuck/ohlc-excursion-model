@@ -16,7 +16,7 @@ python -m pytest
 ```
 
 Tests expect local parquet data at `data/raw/nq_30m.parquet`. If the file is missing,
-the tests that require this data will be skipped.
+the excursion band tests will be skipped.
 
 Outside Nix:
 ```bash
