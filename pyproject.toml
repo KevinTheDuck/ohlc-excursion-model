@@ -7,5 +7,8 @@ name = "ohlc_dss_model"
 version = "0.1.0"
 description = "OHLC Excursion Model"
 
+[project.optional-dependencies]
+test = ["pytest", "polars", "exchange-calendars"]
+
 [tool.setuptools.packages.find]
 where = ["src"]

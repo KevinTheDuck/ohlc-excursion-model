@@ -1,19 +1,14 @@
 import math
+from pathlib import Path
 
 import polars as pl
+import pytest
 
-from ohlc_dss_model.data import (
-    filter_valid_sessions,
-    intraday_session_tagging,
-    load_parquet,
-    remove_incomplete_days,
-    session_tagging,
+DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "raw" / "nq_30m.parquet"
+pytestmark = pytest.mark.skipif(
+    not DATA_FILE.exists(),
+    reason=f"Required data file not found at {DATA_FILE}. Populate data/raw to run.",
 )
-from ohlc_dss_model.features.estimator_spec import FULL_DAY_SPEC, PRE_NY_SPEC
-from ohlc_dss_model.features.excursion_bands import calculate_excursion_bands
-from ohlc_dss_model.features.session_aggregation import aggregate_sessions
-from ohlc_dss_model.features.volatility import yang_zhang
-from ohlc_dss_model.utils.dt_utils import convert_to_timezone
 
 N = 20
 WINDOW_SESSIONS = N + 2
@@ -30,6 +25,15 @@ EXCURSION_BAND_COLS = [
 
 
 def _prepare_real_intraday() -> pl.DataFrame:
+    from ohlc_dss_model.data import (
+        filter_valid_sessions,
+        intraday_session_tagging,
+        load_parquet,
+        remove_incomplete_days,
+        session_tagging,
+    )
+    from ohlc_dss_model.utils.dt_utils import convert_to_timezone
+
     df = load_parquet()
     df = convert_to_timezone(df)
     df = session_tagging(df)
@@ -64,6 +68,11 @@ def _prepare_window_without_last_ny(
 
 
 def _run_excursion_pipeline(df: pl.DataFrame, n: int = N) -> pl.DataFrame:
+    from ohlc_dss_model.features.estimator_spec import FULL_DAY_SPEC, PRE_NY_SPEC
+    from ohlc_dss_model.features.excursion_bands import calculate_excursion_bands
+    from ohlc_dss_model.features.session_aggregation import aggregate_sessions
+    from ohlc_dss_model.features.volatility import yang_zhang
+
     session_df = aggregate_sessions(df)
     session_df = yang_zhang(session_df, FULL_DAY_SPEC, "historical", n=n)
     session_df = yang_zhang(session_df, PRE_NY_SPEC, "session", n=n)
