@@ -210,8 +210,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# data/raw/*
-# data/processed/*
+data/raw/*
+data/processed/*
 strategy_development/*
 reports/*
 notebooks/approaches/strategy/*
