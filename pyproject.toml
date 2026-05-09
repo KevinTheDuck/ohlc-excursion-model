@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "OHLC Excursion Model"
 
 [project.optional-dependencies]
-test = ["pytest", "polars", "exchange-calendars"]
+test = ["pytest", "polars", "exchange-calendars", "requests"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
