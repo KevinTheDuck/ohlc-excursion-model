@@ -4,9 +4,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from ohlc_dss_model.config import config
-
-DATA_FILE = Path(config.data.file_path)
+DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "processed" / "nq_30m.parquet"
 SKIP_REASON = (
     f"Required data file not found at {DATA_FILE}. "
     "Populate the configured 30m parquet file to run excursion band tests."
