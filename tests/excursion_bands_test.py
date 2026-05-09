@@ -4,10 +4,12 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "raw" / "nq_30m.parquet"
+from ohlc_dss_model.config import config
+
+DATA_FILE = Path(config.data.file_path)
 SKIP_REASON = (
     f"Required data file not found at {DATA_FILE}. "
-    "Populate data/raw/nq_30m.parquet to run excursion band tests."
+    "Populate the configured 30m parquet file to run excursion band tests."
 )
 
 N = 20
@@ -61,7 +63,7 @@ def _prepare_window_without_last_ny(
     window_df = df.filter(pl.col("Session").is_in(sessions)).filter(
         ~(
             (pl.col("Session") == last_session)
-            & (pl.col("Intraday_Session") == "New York")
+            & (pl.col("Intraday_Session") == "Target_2")
         )
     )
     return window_df, last_session
@@ -104,5 +106,5 @@ def test_excursion_bands_last_candle_without_ny_session_has_no_leak():
     last_row = result.filter(pl.col("Session") == last_session)
 
     assert last_row.height == 1
-    assert last_row["C_New York"][0] is None
+    assert last_row["C_Target_2"][0] is None
     _assert_finite_bands(last_row)
