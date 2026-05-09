@@ -11,7 +11,7 @@ SKIP_REASON = (
 )
 
 N = 20
-WINDOW_SESSIONS = N + 2
+WINDOW_SESSIONS = (2 * N) + 2
 EXCURSION_BAND_COLS = [
     "Band_AE_Neg_Upper",
     "Band_AE_Neg_Lower",
@@ -68,26 +68,17 @@ def _prepare_window_without_last_ny(
 
 
 def _run_excursion_pipeline(df: pl.DataFrame, n: int = N) -> pl.DataFrame:
-    from ohlc_dss_model.features.estimator_spec import FULL_DAY_SPEC, PRE_NY_SPEC
+    from ohlc_dss_model.features.excursion_bands import assign_direction
+    from ohlc_dss_model.features.estimator_spec import FULL_DAY_SPEC
     from ohlc_dss_model.features.excursion_bands import calculate_excursion_bands
     from ohlc_dss_model.features.session_aggregation import aggregate_sessions
     from ohlc_dss_model.features.volatility import yang_zhang
 
     session_df = aggregate_sessions(df)
     session_df = yang_zhang(session_df, FULL_DAY_SPEC, "historical", n=n)
-    session_df = yang_zhang(session_df, PRE_NY_SPEC, "session", n=n)
-
-    return calculate_excursion_bands(
-        session_df.with_columns(
-            [
-                pl.col("O_Asia").alias("O_Ref"),
-                pl.coalesce([pl.col("Sigma_Historical"), pl.col("Sigma_Today")]).alias(
-                    "Sigma_Historical"
-                ),
-            ]
-        ),
-        n=n,
-    )
+    session_df = session_df.with_columns(pl.col("O_Pre_Target_1").alias("O_Ref"))
+    session_df = assign_direction(session_df)
+    return calculate_excursion_bands(session_df, n=n)
 
 
 def _assert_finite_bands(last_row: pl.DataFrame) -> None:
